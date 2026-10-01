@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Daily X Post Agent</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 18px; }
+    textarea { width: 100%; min-height: 180px; padding: 12px; font: inherit; box-sizing: border-box; }
+    button, select { padding: 10px 14px; margin-top: 10px; margin-right: 8px; cursor: pointer; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 20px; margin: 18px 0; }
+    pre { white-space: pre-wrap; background: #f6f6f6; padding: 14px; border-radius: 10px; }
+    #status { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Daily X Post Agent</h1>
+  <p>Dump what you did today. The agent structures it and turns it into an X-ready post.</p>
+
+  <div class="card">
+    <label>Date <input id="date" type="date" /></label>
+    <br />
+    <textarea id="raw" placeholder="Example: Today I practiced binary search, solved 2 problems, fixed the Supabase signup issue in JeevanSetu, and started authentication."></textarea>
+    <br />
+    <label>Tone
+      <select id="tone">
+        <option value="build-in-public">Build in public</option>
+        <option value="casual">Casual</option>
+        <option value="professional">Professional</option>
+      </select>
+    </label>
+    <br />
+    <button onclick="generate()">Generate X Post</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="card" id="result" hidden>
+    <h2>Generated post</h2>
+    <pre id="post"></pre>
+    <div id="count"></div>
+    <button onclick="publish()">Post to X</button>
+  </div>
+
+<script>
+  const dateInput = document.getElementById('date');
+  dateInput.value = new Date().toISOString().slice(0, 10);
+  let postId = null;
+
+  async function generate() {
+    const status = document.getElementById('status');
+    status.textContent = 'Generating...';
+    const saveRes = await fetch('/api/updates', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({work_date: dateInput.value, raw_update: document.getElementById('raw').value, user_id:'default'})
+    });
+    const update = await saveRes.json();
+    if (!saveRes.ok) { status.textContent = update.detail || 'Failed'; return; }
+
+    const postRes = await fetch('/api/posts/generate', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({update_id:update.id, tone:document.getElementById('tone').value, user_id:'default'})
+    });
+    const post = await postRes.json();
+    if (!postRes.ok) { status.textContent = post.detail || 'Failed'; return; }
+
+    postId = post.id;
+    document.getElementById('post').textContent = post.post_text;
+    document.getElementById('count').textContent = `${post.character_count} characters`;
+    document.getElementById('result').hidden = false;
+    status.textContent = 'Draft ready.';
+  }
+
+  async function publish() {
+    const status = document.getElementById('status');
+    status.textContent = 'Publishing...';
+    const res = await fetch('/api/posts/publish', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({post_id:postId,user_id:'default'})
+    });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = data.detail || 'Publish failed'; return; }
+    status.innerHTML = `Published ✅ X post ID: ${data.x_post_id}`;
+  }
+</script>
+</body>
+</html>
